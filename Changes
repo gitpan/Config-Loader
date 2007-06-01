@@ -1,6 +1,1 @@
-Revision history for Perl extension Config::Loader.
-
-0.01  Sun Dec 12 00:08:27 2004
-	- original version; created by h2xs 1.23 with options
-		-AX -n Config::Loader
-
+1.00  01 Jun 2007  First release of Config::Loader to CPAN

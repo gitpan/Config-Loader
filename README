@@ -1,108 +1,52 @@
-Config-Loader version 0.01
-==========================
-
-Config::Loader finds and parses config file and combines them with command line switches (in a Getopt::Long style).
-
-The format of data in the config files is quite flexible (but simple). All forms below are legal:
-
-	# ignore this line
-
-	bool1
-	nobool2
-	no-bool3
-	bool4   =   1
-	bool5   =   0
-
-	incr1
-	incr1
-	incr2   =   3
-		
-	key1	 	value1  #ignore this comment
-	key2	=	value2
-	key3	:	value3
-	key4	=	"value 4 # include this comment"
-	key5	=	"value 5 \
-				include this with whitespace"\\
-	array4	=	value1 value2 value3 "value 4"
-	array4
-	array4
-	array5	=	value1, value2, value3 ,"value 4"
-	array6	=	value1 \
-				value2 \
-					   \
-				value3 \
-				" value 4 "
-				
-	multiline_array -
-	This text	#include this comment
-
-	and more
-	" just like this "
-	until .
-	.
-
-	multiline_scalar -
-	"This text	#ignore this comment
-
-	and more
-	\" just like this \"
-	until ."
-	.
+NAME
+    Config::Loader - load a configuration directory tree containing YAML,
+    JSON, XML, Perl, INI or Config::General files
 
 SYNOPSIS
+       OO style
+       -------------------------------------------------------
+       use Config::Loader();
 
-  my $c = Config::Loader->new (
-    	config_file		=> 'name' / '/absolute/path',
-    	config_dir		=> 'dir_name',
-    	options			=> {
-					bool				=> '!',
-					incr				=> '+',
-					opt_string			=> ':s',
-					opt_int				=> ':i',
-					opt_float			=> ':f',
-					opt:extint			=> ':o',
-					req_string			=> '=s',
-					etc
-					opt_string_array	=> ':s@',
-					etc
-    					}
-    	cli				=> 1,
-    	order			=> [qw(user global)],
-    	mode			=> 'combine',
-    	warn			=> 1,
-    	debug			=> 0,
-    	check_options	=> 1,
-    	ignore_unknown	=> 1,
-    };				
+       my $config    = Config::Loader->new('/path/to/config');
 
-INSTALLATION
+       @hosts        = $config->('db.hosts.session');
+       $hosts_ref    = $config->('db.hosts.session');
+       @cloned_hosts = $config->clone('db.hosts.session');
+       -------------------------------------------------------
 
-To install this module type the following:
+    OR
 
-   perl Makefile.PL
-   make
-   make test
-   make install
+       Functional style
+       -------------------------------------------------------
+       # On startup
+       use Config::Loader('My::Config' => '/path/to/config');
 
-DEPENDENCIES
+       # Then, in any module where you want to use the config
+       package My::Module;
+       use My::Config;
 
-This module requires these other modules and libraries:
+       @hosts        = C('db.hosts.sesssion');
+       $hosts_ref    = C('db.hosts.sesssion');
+       @cloned_hosts = My::Config::clone('db.hosts.session');
+       $config       = My::Config::object;
+       -------------------------------------------------------
 
-Error
-File::Spec
-IO::File
-Getopt::Long
-Config::Find
-Data::Dumper
+EXAMPLES
+    See the examples/ directory. You need to do a 'make' before running
+    the examples. 
 
-COPYRIGHT AND LICENCE
+THANKS
+    Thanks to Joel Bernstein and Brian Cassidy for the interface to the
+    various configuration modules.
 
-Put the correct copyright and licence information here.
+AUTHOR
+    Clinton Gormley, <clinton@traveljury.com>
 
-Copyright (C) 2004 by Clinton Gormley
+COPYRIGHT
+    Copyright (C) 2007 by Clinton Gormley
 
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself, either Perl version 5.8.3 or,
-at your option, any later version of Perl 5 you may have available.
-
+LICENSE
+    This library is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself, either Perl version 5.8.7 or, at
+    your option, any later version of Perl 5 you may have available.
 

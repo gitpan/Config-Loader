@@ -1,20 +1,66 @@
-use 5.008003;
 use ExtUtils::MakeMaker;
-# See lib/ExtUtils/MakeMaker.pm for details of how to influence
-# the contents of the Makefile that is written.
-WriteMakefile(
-    NAME              => 'Config::Loader',
-    VERSION_FROM      => 'lib/Config/Loader.pm', # finds $VERSION
-    PREREQ_PM         => {
-		Error             => '0.15',
-		File::Spec        => '0.87',
-		IO::File          => '1.10',
-		Getopt::Long      => '2.34',
-		Config::Find      => '0.16',
-		Data::Dumper      => '2.121'
-    }, 
-    ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
-      (ABSTRACT_FROM  => 'lib/Config/Loader.pm', # retrieve abstract from module
-       AUTHOR         => 'Clinton Gormley <develop@traveljury.com>') : ()),
+
+my %prereqs = ( 'Test::More'  => 0,
+                'File::Spec'  => 0,
+                'Storable'    => 0,
+                'Data::Alias' => '1.01',
+                'Config::Any' => '0.07',
+);
+
+my @optional = ( [ 'YAML::Syck', 'YAML' ],
+                 [ 'JSON::Syck', 'JSON' ],
+                 ['Config::Tiny'], ['XML::Simple'], ['Config::General']
+);
+
+## Unless they have a version of Config::Loader >=1, refer them to backpan
+eval { require Config::Loader };
+unless ( $Config::Loader::VERSION >= 1 ) {
+    prompt <<WARNING;
+        
+*** WARNING ***
+
+Config::Loader has changed completely between version 0.01
+and version 1.00. If this version is not what you are expecting,
+you can find the old Config::Loader on http://backpan.cpan.org.
+
+Press ENTER to continue installing:
+WARNING
+
+}
+
+## Optional modules
+my $cpan = $INC{'CPAN.pm'} || $INC{'CPANPLUS.pm'};
+
+print "OPTIONAL MODULES:\n" . ( '-' x 17 ) . "\n";
+OPTION: foreach my $optional (@optional) {
+    foreach my $module (@$optional) {
+        printf( "  - %-20s : ", $module );
+        eval "require $module";
+        if ($@) {
+            if ($cpan) {    
+                if ( lc( prompt( "Install : [y/N]", 'n' ) ) eq 'y' ) {
+                    $prereqs{$module} = 0;
+                    next OPTION;
+                }
+            }
+            else {
+                print "NOT installed\n";
+            }
+        }
+        else {
+            print "Installed\n";
+            next OPTION;
+        }
+    }
+}
+
+WriteMakefile( 'NAME'          => 'Config::Loader',
+               'VERSION_FROM'  => 'Loader.pm',
+               'ABSTRACT_FROM' => 'Loader.pm',
+               'PREREQ_PM'     => \%prereqs,
+               'AUTHOR'        => ' Clinton Gormley <clint@traveljury.com>',
+               $ExtUtils::MakeMaker::VERSION >= 6.31
+               ? ( 'LICENSE' => 'perl' )
+               : (),
 );
 

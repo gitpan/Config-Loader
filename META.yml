@@ -1,16 +1,18 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         Config-Loader
-version:      0.01
-version_from: lib/Config/Loader.pm
-installdirs:  site
-requires:
-    Config::Find:                  0.16
-    Data::Dumper:                  2.121
-    Error:                         0.15
-    File::Spec:                    0.87
-    Getopt::Long:                  2.34
-    IO::File:                      1.10
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.17
+--- #YAML:1.0
+name:                Config-Loader
+version:             1.00
+abstract:            load a configuration directory tree containing
+license:             perl
+generated_by:        ExtUtils::MakeMaker version 6.32
+distribution_type:   module
+requires:     
+    Config::Any:                   0.07
+    Data::Alias:                   1.01
+    File::Spec:                    0
+    Storable:                      0
+    Test::More:                    0
+meta-spec:
+    url:     http://module-build.sourceforge.net/META-spec-v1.2.html
+    version: 1.2
+author:
+    -  Clinton Gormley <clint@traveljury.com>
