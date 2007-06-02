@@ -16,6 +16,7 @@ t/data/perlmulti/global/db.pl
 t/data/perlmulti/global/db2.pl
 t/data/perlmulti/local.perl
 t/data/bad/db.pl
+t/data/empty/.dummy
 t/data/perl/global.perl
 examples/browser.pl
 examples/func.pl
