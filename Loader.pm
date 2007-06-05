@@ -15,7 +15,7 @@ use overload (
 );
 
 use vars qw($VERSION);
-$VERSION = '1.01';
+$VERSION = '1.02';
 
 =head1 NAME
 
@@ -150,7 +150,8 @@ access your configuation data as follows:
 =head1 CONFIG TREE LAYOUT
 
 Config::Loader reads the data from any number (and type) of config files
-stored in a directory tree.
+stored in a directory tree. File names and directory names are used as keys in
+the configuration hash.
 
 It uses file extensions to decide what type of data the file contains, so:
 
@@ -171,17 +172,22 @@ The name of the file or subdirectory is used as the first key.  So:
     global/
         db.yaml:
             username : admin
-            password : 12345
             hosts:
                      - host1
                      - host2
+            password:
+              host1:   password1
+              host2:   password2
 
 would be loaded as :
 
     $Config = {
-       db => {
-          global => { username => 'admin', password => '12345'},
-          hosts  => ['host1','host2'],
+       global => {
+           db => {
+               username => 'admin',
+               password => { host1 => 'password1', host2 => 'password2'},
+               hosts    => ['host1','host2'],
+           }
        }
     }
 

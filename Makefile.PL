@@ -29,7 +29,6 @@ WARNING
 }
 
 ## Optional modules
-my $cpan = $INC{'CPAN.pm'} || $INC{'CPANPLUS.pm'};
 
 print "OPTIONAL MODULES:\n" . ( '-' x 17 ) . "\n";
 OPTION: foreach my $optional (@optional) {
@@ -37,15 +36,10 @@ OPTION: foreach my $optional (@optional) {
         printf( "  - %-20s : ", $module );
         eval "require $module";
         if ($@) {
-            if ($cpan) {    
-                if ( lc( prompt( "Install : [y/N]", 'n' ) ) eq 'y' ) {
-                    $prereqs{$module} = 0;
-                    next OPTION;
-                }
+            if ( lc( prompt( "Install : [y/N]", 'n' ) ) eq 'y' ) {
+                $prereqs{$module} = 0;
             }
-            else {
-                print "NOT installed\n";
-            }
+            next OPTION;
         }
         else {
             print "Installed\n";

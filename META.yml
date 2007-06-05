@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Config-Loader
-version:             1.01
+version:             1.02
 abstract:            load a configuration directory tree containing
 license:             perl
 generated_by:        ExtUtils::MakeMaker version 6.32

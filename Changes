@@ -1,3 +1,8 @@
+1.02  05 Jun 2007  Minor document changes.
+                   The Makefile.PL offers to install optional modules
+                   automatically.
+
 1.01  02 Jun 2007  Added a dummy file  into t/data/empty to create the
                    directory
+
 1.00  01 Jun 2007  First release of Config::Loader to CPAN
