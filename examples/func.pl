@@ -11,7 +11,7 @@ BEGIN {
     eval        { require YAML::Syck; YAML::Syck->import(); 1 }
         or eval { require YAML;       YAML->import();       1 }
         or die "ERROR: "
-        . "YAML::Syck or YAML needs to be installed to use this example browser\n\n";
+        . "YAML::Syck or YAML needs to be installed to use this example\n\n";
     $dir = File::Spec->catdir( (
           File::Spec->splitpath( File::Spec->rel2abs($0) )
         )[ 0, 1 ],

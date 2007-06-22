@@ -1,8 +1,21 @@
-1.02  05 Jun 2007  Minor document changes.
-                   The Makefile.PL offers to install optional modules
-                   automatically.
+1.09_02 22 Jun 2007  DEVELOPER RELEASE
+                     Added advanced usage options:
+                      - skip
+                      - is_local
+                      - load_as
+                      - sort
+                      - debug
+                      - array overrides
 
-1.01  02 Jun 2007  Added a dummy file  into t/data/empty to create the
-                   directory
+                      Fixed a bug (reported by Ewan Edwards) where
+                      an array exists in the main config and a hash in
+                      the local override
 
-1.00  01 Jun 2007  First release of Config::Loader to CPAN
+1.02    05 Jun 2007  Minor document changes.
+                     The Makefile.PL offers to install optional modules
+                     automatically.
+
+1.01    02 Jun 2007  Added a dummy file  into t/data/empty to create the
+                     directory
+
+1.00    01 Jun 2007  First release of Config::Loader to CPAN

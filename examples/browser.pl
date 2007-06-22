@@ -7,8 +7,11 @@ use File::Spec();
 
 init();
 
-my $prod = Config::Loader->new( get_path('config_prod') );
-my $dev  = Config::Loader->new( get_path('config_dev') );
+my $debug = shift @ARGV;
+
+my $prod = Config::Loader->new( path => get_path('config_prod') , debug => $debug);
+my $dev  = Config::Loader->new( path => get_path('config_dev')  , debug => $debug);
+
 my $term = Term::ReadLine->new('Browser');
 
 while ( defined( my $path = $term->readline("Enter path:") ) ) {

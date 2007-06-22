@@ -8,6 +8,7 @@
     testregex   => qr/test/,
     testobj     => bless({},'ABC'),
     list        => { a => 'b'},
+    array       => [1,2,3,4],
 }
     
             

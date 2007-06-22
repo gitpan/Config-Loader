@@ -1,3 +1,7 @@
-{   global => {engine => 'Oracle'}}
+{   global => {
+        engine => 'Oracle',
+        array  => { key => 'value' },
+    }
+}
     
             

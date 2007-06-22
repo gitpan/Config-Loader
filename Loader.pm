@@ -15,7 +15,7 @@ use overload (
 );
 
 use vars qw($VERSION);
-$VERSION = '1.02';
+$VERSION = '1.09_02';
 
 =head1 NAME
 
@@ -53,10 +53,45 @@ OR
    $config       = My::Config::object;
    -------------------------------------------------------
 
+ADVANCED USAGE
+
+   OO style
+   -------------------------------------------------------
+   my $config    = Config::Loader->new(
+       path      => '/path/to/config',
+       skip      => sub {} | regex | {} ,
+       is_local  => sub {} | regex | {} ,
+       load_as   => sub {} | regex ,
+       sort      => sub {} ,
+       debug     => 1 | 0
+   );
+   -------------------------------------------------------
+
+   Functional style
+   -------------------------------------------------------
+   use Config::Loader(
+       'My::Config' => '/path/to/config',
+       {
+           skip      => sub {} | regex | {} ,
+           is_local  => sub {} | regex | {} ,
+           load_as   => sub {} | regex ,
+           sort      => sub {} ,
+           debug     => 1 | 0
+       }
+   );
+
+   # Also, you can subclass these:
+
+     package My::Config;
+     sub skip {
+         ...
+     }
+
+   -------------------------------------------------------
 
 =head1 DESCRIPTION
 
-Config::Loader is a configuration module which has five aims:
+Config::Loader is a configuration module which has six goals:
 
 =over
 
@@ -90,6 +125,12 @@ See L</"OVERRIDING CONFIG LOCALLY">
 Load all config at startup so that (eg in the mod_perl environment) the
 data is shared between all child processes. See L</"MINIMISING MEMORY USE">
 
+=item * Flexible implementation
+
+You may want to use a different schema for your configuration files,
+so you can pass in (or subclass) methods for determining how your
+files are merged.  See L</"ADVANCED USAGE">.
+
 =back
 
 =head1 USING C<Config::Loader>
@@ -106,6 +147,8 @@ There are two ways to use C<Config::Loader>:
    @hosts        = $config->('db.hosts.session');
    $hosts_ref    = $config->('db.hosts.session');
    @cloned_hosts = $config->clone('db.hosts.session');
+
+Also, see L</"ADVANCED USAGE">.
 
 =item YOUR OWN CONFIG CLASS (functional style)
 
@@ -213,7 +256,8 @@ called syndication.
 The situation often arises where it is necessary to specify
 different config values on different machines. For instance,
 the database host on a dev machine may be different from the host
-on the live application.
+on the live application. Also, see L</"ADVANCED USAGE"> which
+provides you with other means to merge local data.
 
 Instead of changing this data during dev and then having to remember
 to change it back before putting the new code live, we have a mechanism
@@ -332,29 +376,44 @@ the directory specified, and returns the object.
 
 =cut
 
-#==========================================
+#===================================
 sub new {
-#==========================================
+#===================================
     my $proto = shift;
     my $class = ref $proto || $proto;
 
     my $self = {};
     bless( $self, $class );
 
-    my $dir = shift
+    my $params
+        = @_ > 1 ? {@_}
+        : ref $_[0] eq 'HASH' ? shift()
+        :                       { path => shift() };
+
+    # Emit debug messages
+    $self->{debug} = $params->{debug} ? 1 : 0;
+
+    die "Parameter 'sort' must be a coderef"
+        if exists $params->{sort} && ref $params->{sort} ne 'CODE';
+
+    # Setup callbacks
+    $self->_init_callback( $_, $params->{$_} )
+        foreach qw(skip is_local load_as sort);
+
+    my $path = $params->{path}
         or die(   "Configuration directory not specified when creating a new "
                 . "'$class' object" );
 
-    if ( $dir && -d $dir && -r _ ) {
+    if ( $path && -d $path && -r _ ) {
 
-        $dir =~ s|/?$|/|;
-        $self->{config_dir} = $dir;
+        $path =~ s|/?$|/|;
+        $self->{config_dir} = $path;
         $self->load_config();
 
         return $self;
     }
     else {
-        die("Configuration directory '$dir' not readable when creating a new "
+        die("Configuration directory '$path' not readable when creating a new "
                 . "'$class' object" );
     }
     return $self;
@@ -400,9 +459,9 @@ examined, rather than the C<$config> data.
 
 =cut
 
-#==========================================
+#===================================
 sub C {
-#==========================================
+#===================================
     my $self = shift;
     my $path = shift;
     $path = '' unless defined $path;
@@ -459,7 +518,7 @@ sub _walk_path {
         }
         elsif ( ref $config eq 'HASH' && exists $config->{$key} ) {
             $config = $config->{$key};
-            $key_path .= ( $key_path ? '.' : '' ) . $key;
+            $key_path = $self->_join_key_path( $key_path, $key );
             next;
         }
         die("Invalid key '$key' specified for '$key_path'\n");
@@ -480,9 +539,9 @@ performance hit.  That said, Storable's dclone is very fast.
 
 =cut
 
-#==========================================
+#===================================
 sub clone {
-#==========================================
+#===================================
     my $self = shift;
     my $data = $self->Config::Loader::C(@_);
     return Storable::dclone($data);
@@ -550,60 +609,62 @@ Will reload the config files located in the directory specified at object
 creation (see L</"new()">).
 
 BEWARE : If you are using this in a mod_perl environment, you will lose the
-benefit of shared memory - each child will have its own copy of the data.
+benefit of shared memory by calling this in a child process
+ - each child will have its own copy of the data.
 See L<MINIMISING MEMORY USE>.
 
 Returns the config hash ref.
 
 =cut
 
-#==========================================
+#===================================
 sub load_config {
-#==========================================
+#===================================
     my $self = shift;
-    return $self->{config} = $self->_load_config();
+    $self->{_memo} = {};
+    $self->debug("Loading config data");
+    return $self->{config} = $self->_load_config() || {};
 }
 
-#==========================================
+#===================================
 sub _load_config {
-#==========================================
-    my $self   = shift;
-    my $dir    = shift || $self->{config_dir};
-    my $config = {};
-    $self->{_memo} = {};
+#===================================
+    my $self          = shift;
+    my $dir           = shift || $self->{config_dir};
+    my $key_path      = shift || '';
+    my $loading_local = shift;
 
-    my @local_files;
-    my @config_files
-        = sort { $a cmp $b } glob( File::Spec->catfile( $dir, '*' ) );
+    my $config = {};
+
+    my @local;
+    my $config_files = $self->{sort}
+        ->( $self, [ glob( File::Spec->catfile( $dir, '*' ) ) ] );
+
+    my $is_local = $self->{is_local};
+    $self->debug( '', "Entering dir: $dir", '-' x ( length($dir) + 14 ) );
 
 CONFIG_FILE:
-    foreach my $config_file (@config_files) {
-        my ( $data, $name );
+    foreach my $config_file (@$config_files) {
+        my ( $data, $name, $curr_key_path, $loader );
+
         my $filename = ( File::Spec->splitpath($config_file) )[2];
 
         # If it is a file
         if ( -f $config_file ) {
+            $self->debug("  Found file : $config_file");
 
             # Must have an extension
             ( $name, my $ext ) = ( $filename =~ /(.+)[.]([^.]+)/ )
-                or next CONFIG_FILE;
+                or $self->debug("  ... No extension") && next CONFIG_FILE;
 
             # Must have an associated module
-            my $loader = $Module_For_Ext{ lc $ext }
-                or next CONFIG_FILE;
-
-            # If it is a local file, process last
-            if ( lc($name) eq 'local' ) {
-                push @local_files, [ $loader, $config_file ];
-                next CONFIG_FILE;
-            }
-            $data = $self->_load_config_file( $loader, $config_file );
+            $loader = $Module_For_Ext{ lc $ext }
+                or $self->debug("  ... No loader") && next CONFIG_FILE;
         }
-
-        # If it is a directory, recurse
         elsif ( -d $config_file ) {
-            $data = $self->_load_config($config_file);
+            $self->debug("  Found dir : $config_file");
             $name = $filename;
+            undef $loader;
         }
 
         # Anything else (eg symlink), skip
@@ -611,8 +672,32 @@ CONFIG_FILE:
             next;
         }
 
+        # If it is a local file/dir, process last
+        if ( !$loading_local && $is_local->( $self, $name ) ) {
+            $self->debug("  ... will merge later");
+            push @local, [ $loader, $config_file, $filename ];
+            next CONFIG_FILE;
+        }
+
+        # Find the key name from the filename
+        $name = $self->_load_as( $key_path, $name, $loading_local );
+        next CONFIG_FILE if not defined $name;
+
+        # loader = module name to load file, or undef for directory
+        $data
+            = $loader
+            ? $self->_load_config_file( $loader, $config_file )
+            : $self->_load_config( $config_file,
+                                   $self->_join_key_path( $key_path, $name ),
+                                   $loading_local );
+
+        next CONFIG_FILE unless defined $data;
+
         # Merge keys if already exists
-        if ( exists $config->{$name} ) {
+        if (    exists $config->{$name}
+             && ref $config->{$name} eq 'HASH'
+             && ref $data            eq 'HASH' )
+        {
             $config->{$name}->{$_} = $data->{$_} foreach keys %$data;
         }
         else {
@@ -621,41 +706,79 @@ CONFIG_FILE:
     }
 
     # Merge local config into main config
-    foreach my $local_file (@local_files) {
-        my $data = $self->_load_config_file(@$local_file);
-        $config = $self->_merge_local( $config, $data );
+LOCAL_FILE:
+    foreach my $local_file (@local) {
+        my ( $loader, $config_file, $name ) = @$local_file;
+        $self->debug("  Merging file $config_file");
+        $name = $self->_load_as( $key_path, $name, 1 );
+        next LOCAL_FILE
+            unless defined $name;
+
+        my $data
+            = $loader
+            ? $self->_load_config_file( $loader, $config_file )
+            : $self->_load_config( $config_file, $key_path, 1 );
+
+        next LOCAL_FILE unless defined $data;
+
+        $config = $self->_merge_hash( $config, $name
+                                      ? { $name => $data }
+                                      : $data
+        );
     }
 
-    return $config;
+    return keys %$config ? $config : undef;
 }
 
-#==========================================
-sub _merge_local {
-#==========================================
-    my $self   = shift;
-    my $config = shift;
-    my $local  = shift;
-    foreach my $key ( keys %$local ) {
-        if ( ref $local->{$key} eq 'HASH'
-             && exists $config->{$key} )
-        {
-            $config->{$key}
-                = $self->_merge_local( $config->{$key}, $local->{$key} );
-        }
-        else {
-            $config->{$key} = $local->{$key};
-        }
+#===================================
+sub _load_as {
+#===================================
+    my ( $self, $key_path, $name, $loading_local ) = @_;
+
+    # Find the key name from the filename
+    $name = $self->{load_as}->( $self, $name, $loading_local );
+    unless ( defined $name ) {
+        $self->debug("  ... Skipped by load_as()");
+        return;
     }
-    return $config;
+
+    die "load_as() cannot return '' when loading main config"
+        if !$loading_local && $name eq '';
+
+    my $curr_key_path = $self->_join_key_path( $key_path, $name );
+    $self->debug( "  ... loading at : "
+                  . ( length($curr_key_path) ? $curr_key_path : '.' ) );
+
+
+    if ( $self->{skip}->( $self, $curr_key_path ) ) {
+        $self->debug("  ... skipped by skip()");
+        return;
+    }
+    return $name;
 }
 
-#==========================================
+#===================================
+sub _join_key_path {
+#===================================
+    my ( $self, $key_path, $name ) = @_;
+    return $key_path . '.' . $name if length($key_path);
+    return $name;
+}
+
+#===================================
 sub _load_config_file {
-#==========================================
+#===================================
     my $self = shift;
     my ( $loader, $config_file ) = @_;
+    $self->debug("  ... with : $loader");
     my $data;
-    eval { $data = $loader->load($config_file) };
+    eval {
+        my @data = $loader->load($config_file);
+        $data
+            = @data > 1
+            ? \@data
+            : $data[0];
+    };
     if ($@) {
         die( "Error loading config file $config_file:\n\n" . $@ );
     }
@@ -698,8 +821,8 @@ sub clear_cache {
 
 =item C<import()>
 
-C<import()> will normally be called automatically when you C<use Config::Loader>.
-However, you may want to do this:
+C<import()> will normally be called automatically when you
+C<use Config::Loader>. However, you may want to do this:
 
     use Config::Loader();
     Config::Loader->register_loader('My::Plugin' => 'ext');
@@ -744,11 +867,13 @@ package:
 
 =back
 
+=back
+
 =cut
 
-#==========================================
+#===================================
 sub import {
-#==========================================
+#===================================
     my $caller_class = shift;
     my ( $class, $dir ) = @_;
     return
@@ -777,13 +902,17 @@ USAGE
         $INC{$inc_path} = 'Auto-inflated by ' . $caller_class;
     }
 
-    my $config = $class->new($dir);
+    my $params = @_ % 2 ? shift() : {@_};
+    $params->{path} = $dir;
+    my $config = $class->new(%$params);
 
     # Export C, clone to the subclass
     *{ $class . "::C" }
         = sub { my $c = ref $_[0] ? shift : $config; return C( $c, @_ ) };
-    *{ $class . "::clone" }
-        = sub { my $c = ref $_[0] ? shift : $config; return clone( $c, @_ ) };
+    *{ $class . "::clone" } = sub {
+        my $c = ref $_[0] ? shift : $config;
+        return clone( $c, @_ );
+    };
     *{ $class . "::object" } = sub { return $config };
 
     # Create a new import sub in the subclass
@@ -797,7 +926,567 @@ USAGE
     return;
 }
 
+
+#===================================
+sub _merge_hash {
+#===================================
+    my $self   = shift;
+    my $config = shift;
+    my $local  = shift;
+KEY:
+    foreach my $key ( keys %$local ) {
+        if ( ref $local->{$key} eq 'HASH'
+             && exists $config->{$key} )
+        {
+            if ( ref $config->{$key} eq 'HASH' ) {
+                $self->debug("  ... entering hash : $key");
+                $config->{$key}
+                    = $self->_merge_hash( $config->{$key}, $local->{$key} );
+                next KEY;
+            }
+            if (    ref $config->{$key} eq 'ARRAY'
+                 && exists $local->{$key}{'!'}
+                 && ref $local->{$key}{'!'} eq 'HASH' )
+            {
+                $self->_merge_array( $key, $config, $local );
+                next KEY;
+            }
+        }
+        $self->debug("  ... setting key : $key");
+        $config->{$key} = $local->{$key};
+    }
+    $self->debug("  ... leaving hash");
+    return $config;
+}
+
+=head1 ADVANCED USAGE
+
+The items in the section allow you to customise how Config::Loader
+loads your data.  You may never need them.
+
+You can:
+
+=over
+
+=item *
+
+Override array values
+
+=item *
+
+Skip the loading of parts of your config tree
+
+=item *
+
+Specify which files / dirs are local
+
+=item *
+
+Specify how to translate a file / dir name into a key
+
+=item *
+
+Change order in which files are loaded
+
+=item *
+
+See debug output
+
 =back
+
+=over
+
+=item Overriding array values
+
+Overriding hash values is easy, however arrays are more complex.
+it may be simpler to copy and paste and edit the array you want to
+change locally.
+
+However, if your array is too long, and you want to make small changes,
+then you can use the following:
+
+In the main config:
+
+    {
+      cron => [qw( job1 job2 job3 job4)]
+    }
+
+In the local file
+
+    {
+      cron => {
+        '3'  => 'newjob4',      # changes 'job4' -> 'newjob4'
+
+        '!'  => {               # signals an array override
+
+             '-' => [1],        # deletes 'job2'
+
+             '+' => ['job5'],   # appends 'job5'
+
+          OR '+' => {           # inserts 'job3a' after 'job3'
+                 2 => 'job3a'
+             }
+        }
+    }
+
+=over
+
+=item *
+
+The override has to be a hash, with at least this structure
+ C<< { '!' => {} } >> to signal an array override
+
+=item *
+
+Any other keys with integers are treated as indexes and
+are used to change the value at that index in the original array
+
+=item *
+
+The C<'-'> key should contain an array ref, with the indexes of the
+elements to remove from the array.
+
+=item *
+
+If the C<'+'> key contains an array ref, then its contents are appended
+to the original array.
+
+=item *
+
+If the C<'+'> key contains a hash ref, then each value is inserted
+into the original array at the index given in the key
+
+=item *
+
+Indexes are zero based, just as in Perl.
+
+=back
+
+=cut
+
+#===================================
+sub _merge_array {
+#===================================
+    my ( $self, $key, $config, $local ) = @_;
+    $self->debug("  ... merging array : $key");
+    my $dest    = $config->{$key};
+    my $merge   = $local->{$key};
+    my $changes = delete $merge->{'!'};
+
+    # Changed elements
+    foreach my $index ( keys %$merge ) {
+        $index = '' if !defined $index;
+        die "Array override for key '$key' : '$index' is not an integer"
+            unless $index =~ /^\d+$/;
+        $dest->[$index] = $merge->{$index};
+        $self->debug("      ... changing index  : $index");
+    }
+
+    my %actions;
+
+    # Deleted elements
+    my $remove = $changes->{'-'} || [];
+    die "Index delete for key '$key' : '-' is not an array ref"
+        unless ref $remove eq 'ARRAY';
+
+    foreach my $delete_index (@$remove) {
+        next unless $delete_index =~ /^\d+/;
+        $actions{$delete_index} = ['-']
+            if $delete_index < @$dest;
+    }
+
+    # Added elements
+    my $add = $changes->{'+'} || [];
+
+    # Append
+    if ( ref $add eq 'ARRAY' ) {
+        if (@$add) {
+            push @$dest, @$add;
+            $self->debug(
+                  '      ... appending ' . ( scalar @$add ) . ' element(s)' );
+        }
+    }
+
+    # Insert
+    elsif ( ref $add eq 'HASH' ) {
+        foreach my $add_index ( keys %$add ) {
+            next unless $add_index =~ /^\d+/;
+            $actions{$add_index} = [ (  exists $actions{$add_index}
+                                            || $add_index >= @$dest
+                                     )
+                                     ? '~'
+                                     : '+',
+                                     $add->{$add_index}
+            ];
+        }
+
+    }
+    else {
+        die "Array add for key '$key' : '+' is not an array or hash ref";
+    }
+
+    foreach my $index ( sort { $b <=> $a } keys %actions ) {
+        my ( $action, $value ) = @{ $actions{$index} };
+        if ( $action eq '-' ) {
+            splice( @$dest, $index, 1 );
+            $self->debug("      ... deleting index  : $index");
+            next;
+        }
+        if ( $action eq '~' ) {
+            $dest->[$index] = $value;
+            $self->debug("      ... changing index  : $index");
+            next;
+        }
+        splice( @$dest, $index, 0, $value );
+        $self->debug("      ... inserting index : $index");
+    }
+    return;
+}
+
+=item C<skip()>
+
+    $c = Config::Loader->new(
+            path  => '/path/to/config',
+            skip  => qr/regex/,
+                     | [ qr/regex1/, qr/regex2/...]
+                     | {  name1 => 1, name2 => 2}
+                     | sub {}
+    );
+
+C<skip()> allows you to skip the loading of parts of your config
+tree.  For instance, if you don't need a list of cron jobs when running
+your web server, you can skip it.
+
+The decision is made based on the path to that value, eg 'app.db.hosts'
+rather than on filenames. Also, the check is only performed for each
+new directory or filename - it doesn't check the data within each file.
+
+To use C<skip()>, you can either subclass it, or pass in a parameter
+to new:
+
+=over
+
+=item C<qr/regex/> or C<[qr/regex1/, qr/regex2]>
+
+Each regex will be checked against the key path, and if it matches
+then the loading of that tree will be skipped
+
+=item C<< {key_path => 1} >>
+
+If the key path exists in the hash, then loading will be skipped
+
+=item C<sub {}> or subclassed C<skip>
+
+   sub {
+       my ($self,$key_path) = @_;
+       ...make decision...
+       return 1 | 0;
+   }
+
+=back
+
+=cut
+
+#===================================
+sub skip {
+#===================================
+    return;
+}
+
+=item C<is_local()>
+
+    $c = Config::Loader->new(
+            path     => '/path/to/config',
+            is_local => qr/regex/,
+                        | [ qr/regex1/, qr/regex2/...]
+                        | {  name1 => 1, name2 => 2}
+                        | sub {}
+    );
+
+C<is_local()> indicates whether a file or dir should be considered
+part of the main config (and thus loaded normally) or part of the
+local config (and thus merged into the main config).
+
+The decision is made based on the name of the file / dir, without
+any extension.
+
+To use C<is_local()>, you can either subclass it, or pass in a parameter
+to new:
+
+=over
+
+=item C<qr/regex/> or C<[qr/regex1/, qr/regex2]>
+
+Each regex will be checked against the file/dir name, and if it matches
+then that tree will be merged
+
+=item C<< {filename => 1, dirname => 1} >>
+
+If the file/dir name exists in the hash, then that tree will be merged
+
+=item C<sub {}> or subclassed C<is_local>
+
+   sub {
+       my ($self,$name) = @_;
+       ...make decision...
+       return 1 | 0;
+   }
+
+=back
+
+See L</"EXAMPLE USING is_local() AND load_as()">.
+
+=cut
+
+#===================================
+sub is_local {
+#===================================
+    my ( $self, $filename ) = @_;
+    return $filename =~ /^local\b/;
+}
+
+=item C<load_as()>
+
+    $c = Config::Loader->new(
+            path     => '/path/to/config',
+            load_as  => qr/(regex)/,
+                        | sub {}
+    );
+
+C<load_as()> returns the name of the key to use when loading
+the file / dir. By default, it returns the C<$name> for main
+config files, or C<''> for local files.
+
+The decision is made based on the name of the file / dir, without
+any extension.
+
+If C<load_as()> returns an empty string, then each key in the file/tree
+is merged separately. This is how the C<local.*> files work by default.
+See L</"OVERRIDING CONFIG LOCALLY">.
+
+For instance:
+
+   main.yaml:
+     key1:  value
+     key2:  value
+
+   db.yaml:
+     key3:  value
+     key4:  value
+
+   local.yaml:
+     main:
+        key1: new_value
+     db:
+        key4: new_value
+
+To use C<load_as()>, you can either subclass it, or pass in a parameter
+to new:
+
+=over
+
+=item C<qr/(regex)/>
+
+The regex will be checked against the file/dir name, and if it matches
+then it returns the string captured in the regex, otherwise it returns
+the original name.
+
+=item C<sub {}> or subclassed C<is_local>
+
+   sub {
+       my ($self,$name,$is_local) = @_;
+       ...make decision...
+       return 'string';   # string is used as the keyname
+       return '';         # acts like local.* (see above)
+       return undef;      # don't load this file/dir
+   }
+
+=back
+
+Also, see L</"EXAMPLE USING is_local() AND load_as()">.
+
+=cut
+
+#===================================
+sub load_as {
+#===================================
+    my ( $self, $filename, $local ) = @_;
+    return $local ? '' : $filename;
+}
+
+my %callbacks = ( CODE  => \&_init_code_callback,
+                  HASH  => \&_init_hash_callback,
+                  ARRAY => \&_init_array_callback,
+);
+
+=item EXAMPLE USING C<is_local()> AND C<load_as()>
+
+For instance, instead of using C<local.*> files, you may want to
+keep versioned copies of local configs for different machines, and so use:
+
+   app.yaml
+   app-(dev1.domain.com).yaml
+   app-(dev2.domain.com).yaml
+
+You would implement this as follows:
+
+    my $config = Config::Loader->new(
+        path        => '/path/to/config',
+
+        # If matches 'xxx-(yyy)'
+        is_local    => sub {
+            my ( $self, $name ) = @_;
+            return $name=~/- [(] .+ [)]/x ? 1 : 0;
+        },
+
+        # If local and matches 'xxx-(hostname)', return xxx
+        load_as => sub {
+            my ( $self, $name, $is_local ) = @_;
+            if ($is_local) {
+                if ( $name=~/(.*) - [(] ($hostname) [)] /x ) {
+                    return  $1;
+                }
+                return undef;
+            }
+            return $name;
+        }
+    );
+
+See C<examples/advanced.pl> for a working illustration.
+
+=item C<sort()>
+
+    $c = Config::Loader->new(
+            path   => '/path/to/config',
+            sort   => sub {}
+    );
+
+By default, directory entries are sorted alphabetically, with
+directories before filenames.
+
+This would be the order for these directory entries:
+
+  api/
+  api-(dev1)/
+  api.yaml
+  api-(dev1).yaml
+
+To override this, you can subclass C<sort()> or pass it in as a
+parameter to new:
+
+   sub {
+       my ($self,@names) = @_
+       ...sort...
+       return @names;
+   }
+
+=cut
+
+#===================================
+sub sort {
+#===================================
+    my ( $self, $names ) = @_;
+    s/[.]([^.]+$)/ .$1/ foreach @$names;
+    $names = [ sort { $a cmp $b } @$names ];
+    s/ [.]([^.]+$)/.$1/ foreach @$names;
+    return $names;
+}
+
+=item C<debug()>
+
+    my $config = Config::Loader->new(
+        path        => '/path/to/config',
+        debug       => 1 | 0
+    );
+
+If C<debug> is true, then Config::Loader prints out an explanation
+of what it is doing on STDERR.
+
+=back
+
+=cut
+
+#===================================
+sub debug {
+#===================================
+    my $self = shift;
+    print STDERR ( join( "\n", @_, '' ) )
+        if $self->{debug};
+    return 1;
+}
+
+#===================================
+sub _init_callback {
+#===================================
+    my ( $self, $callback, $check ) = @_;
+
+    # If nothing set, use default or subclassed version
+    unless ($check) {
+        $self->{$callback} = $self->can($callback);
+        $self->debug("Using default or subclassed $callback()");
+        return;
+    }
+
+    $check = [$check]
+        unless exists $callbacks{ ref $check };
+
+    $self->debug( 'Using ' . ( ref $check ) . " handler for $callback()" );
+
+    $self->{$callback} = $callbacks{ ref $check }->( $check, $callback );
+    return;
+}
+
+#===================================
+sub _init_code_callback {
+#===================================
+    return $_[0];
+}
+
+#===================================
+sub _init_hash_callback {
+#===================================
+    my ( $check, $callback ) = @_;
+    die "load_as() cannot be a hashref"
+        if $callback eq 'load_as';
+    return sub {
+        my $self  = shift;
+        my $param = shift;
+        return exists $check->{$param};
+    };
+}
+
+#===================================
+sub _init_array_callback {
+#===================================
+    my ( $check, $callback ) = @_;
+    if ( $callback eq 'load_as' ) {
+        die "load_as() must contain a single regex"
+            unless @$check == 1;
+        my $regex = $check->[0];
+        return sub {
+            my $self     = shift;
+            my $filename = shift;
+            return $filename =~ m/$regex/
+                ? $1
+                : $filename;
+        };
+    }
+
+    foreach my $value (@$check) {
+        $value ||= '';
+        die "'$value' is not a regular expression"
+            unless ref $value eq 'Regexp';
+    }
+    return sub {
+        my $self  = shift;
+        my $value = shift;
+        foreach my $regex (@$check) {
+            return 1 if $value =~ m/$regex/;
+        }
+        return 0;
+    };
+}
+
 
 =head1 SEE ALSO
 
@@ -808,16 +1497,16 @@ L<Config::Any::General>
 =head1 THANKS
 
 Thanks to Joel Bernstein and Brian Cassidy for the interface to the various
-configuration modules.
-
-=head1 TODO
-
-Allow the merging of arrays in C<local> files - currently one array overwrites
-another.  It would be nice to add/delete/change specific elements of any array.
+configuration modules. Also to Ewan Edwards for his suggestions about how
+to make Config::Loader more flexible.
 
 =head1 BUGS
 
-None known
+No bugs have been reported.
+
+Please report any bugs or feature requests to
+bug-config-loader@rt.cpan.org, or through the web interface at
+L<http://rt.cpan.org>.
 
 =head1 AUTHOR
 
@@ -839,3 +1528,4 @@ at your option, any later version of Perl 5 you may have available.
 =cut
 
 1
+
