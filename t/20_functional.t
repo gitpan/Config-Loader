@@ -5,13 +5,18 @@ use File::Spec;
 use Test::More 'tests' => 31;
 
 my $path;
-BEGIN { $path = File::Spec->catdir(
-            (  File::Spec->splitpath(
+BEGIN {
+    my $vol;
+    ($vol,$path) = File::Spec->splitpath(
                    File::Spec->rel2abs($0)
-            ))[ 0, 1 ]
-            , qw(data perlmulti)
-        );
+            );
+    $path = File::Spec->catdir(
+        File::Spec->splitdir($path),
+        'data','perlmulti'
+    );
+    $path =  File::Spec->catpath($vol,$path,'');
 }
+
 BEGIN { use_ok('Config::Loader', 'My' => $path); }
 BEGIN { use_ok('My'); }
 
@@ -138,4 +143,3 @@ $data->{image} = '123';
 isnt(       $config->C('global.db.hosts.image'),
             '123',
             'Func - Object overwrite clone' );
-

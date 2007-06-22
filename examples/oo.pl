@@ -20,9 +20,12 @@ print Dump($data);
 #===================================
 sub get_path {
 #===================================
-    return
-        File::Spec->catdir( (
-            File::Spec->splitpath( File::Spec->rel2abs($0)))[ 0, 1 ],@_
-        );
+    my ($vol,$path) = File::Spec->splitpath(
+                   File::Spec->rel2abs($0)
+            );
+    $path = File::Spec->catdir(
+        File::Spec->splitdir($path),
+        ,@_
+    );
+    return File::Spec->catpath($vol,$path,'');
 }
-

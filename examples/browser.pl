@@ -53,12 +53,14 @@ sub dump_vals {
 #===================================
 sub get_path {
 #===================================
-    return File::Spec->catdir(
-            (  File::Spec->splitpath(
+    my ($vol,$path) = File::Spec->splitpath(
                    File::Spec->rel2abs($0)
-            ))[ 0, 1 ]
-            ,@_
-        );
+            );
+    $path = File::Spec->catdir(
+        File::Spec->splitdir($path),
+        ,@_
+    );
+    return File::Spec->catpath($vol,$path,'');
 }
 
 #===================================

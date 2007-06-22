@@ -88,13 +88,15 @@ like(       $@,
             qr/not a regular expression/,
             "Not regex" );
 
-
-
+#===================================
 sub get_path {
-    return File::Spec->catdir(
-            (  File::Spec->splitpath(
+#===================================
+    my ($vol,$path) = File::Spec->splitpath(
                    File::Spec->rel2abs($0)
-            ))[ 0, 1 ]
-            , 'data',@_
-        );
+            );
+    $path = File::Spec->catdir(
+        File::Spec->splitdir($path),
+        'data',@_
+    );
+    return File::Spec->catpath($vol,$path,'');
 }

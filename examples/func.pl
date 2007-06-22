@@ -12,12 +12,15 @@ BEGIN {
         or eval { require YAML;       YAML->import();       1 }
         or die "ERROR: "
         . "YAML::Syck or YAML needs to be installed to use this example\n\n";
-    $dir = File::Spec->catdir( (
-          File::Spec->splitpath( File::Spec->rel2abs($0) )
-        )[ 0, 1 ],
-        'config_dev'
-    );
 
+    my ($vol,$path) = File::Spec->splitpath(
+                   File::Spec->rel2abs($0)
+            );
+    $path = File::Spec->catdir(
+        File::Spec->splitdir($path),
+        ,'config_dev'
+    );
+    $dir = File::Spec->catpath($vol,$path,'');
 }
 
 # Set up the class My::Config
