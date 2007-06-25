@@ -711,9 +711,9 @@ ADVANCED USAGE
         parameter to new:
 
            sub {
-               my ($self,@names) = @_
+               my ($self,$names_array_ref) = @_
                ...sort...
-               return @names;
+               return $names_array_ref;
            }
 
     "debug()"

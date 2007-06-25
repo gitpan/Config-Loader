@@ -15,7 +15,7 @@ use overload (
 );
 
 use vars qw($VERSION);
-$VERSION = '1.10';
+$VERSION = '1.11';
 
 =head1 NAME
 
@@ -1375,9 +1375,9 @@ To override this, you can subclass C<sort()> or pass it in as a
 parameter to new:
 
    sub {
-       my ($self,@names) = @_
+       my ($self,$names_array_ref) = @_
        ...sort...
-       return @names;
+       return $names_array_ref;
    }
 
 =cut
