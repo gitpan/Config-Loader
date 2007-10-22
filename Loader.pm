@@ -15,12 +15,17 @@ use overload (
 );
 
 use vars qw($VERSION);
-$VERSION = '1.11';
+$VERSION = '1.12';
 
 =head1 NAME
 
-Config::Loader - load a configuration directory tree containing
-YAML, JSON, XML, Perl, INI or Config::General files
+Config::Loader - (DEPRECATED) Replaced by Config::Merge
+
+=head1 DEPRECATED
+
+   Please use L<Config::Merge> instead of this module. Config::Merge version
+   1.00 is a direct copy of this version, but all further development will
+   happen in the new namespace.
 
 =head1 SYNOPSIS
 
@@ -1375,9 +1380,9 @@ To override this, you can subclass C<sort()> or pass it in as a
 parameter to new:
 
    sub {
-       my ($self,$names_array_ref) = @_
+       my ($self,@names) = @_
        ...sort...
-       return $names_array_ref;
+       return @names;
    }
 
 =cut

@@ -1,7 +1,7 @@
 --- #YAML:1.0
 name:                Config-Loader
-version:             1.11
-abstract:            load a configuration directory tree containing
+version:             1.12
+abstract:            (DEPRECATED) Replaced by Config::Merge
 license:             perl
 generated_by:        ExtUtils::MakeMaker version 6.32
 distribution_type:   module

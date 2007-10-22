@@ -1,4 +1,4 @@
-1.11    25 Jun 2007  Minor typo in the docs for sort()
+1.12    22 Oct 2007  Deprecated in favour of Config::Merge
 
 1.10    25 Jun 2007  Bumped to version 1.10
 

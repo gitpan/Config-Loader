@@ -12,21 +12,16 @@ my @optional = ( [ 'YAML::Syck', 'YAML' ],
                  ['Config::Tiny'], ['XML::Simple'], ['Config::General']
 );
 
-## Unless they have a version of Config::Loader >=1, refer them to backpan
-eval { require Config::Loader };
-unless ( $Config::Loader::VERSION >= 1 ) {
-    prompt <<WARNING;
+prompt <<WARNING;
         
 *** WARNING ***
 
-Config::Loader has changed completely between version 0.01
-and version 1.00. If this version is not what you are expecting,
-you can find the old Config::Loader on http://backpan.cpan.org.
+Config::Loader has been deprecated in favour of Config::Merge, which is
+a more meaningful name.  All new development will happen in Config::Merge.
 
-Press ENTER to continue installing:
+Press ENTER to continue installing.
+
 WARNING
-
-}
 
 ## Optional modules
 
